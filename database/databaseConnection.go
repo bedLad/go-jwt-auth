@@ -38,5 +38,7 @@ var Client *mongo.Client = DBinstance()
 
 func OpenCollection(client *mongo.Client, c_name string) *mongo.Collection {
 	collection := client.Database("golang-auth-db").Collection(c_name)
+	fmt.Println("Connected to mongoDB!!")
+
 	return collection
 }

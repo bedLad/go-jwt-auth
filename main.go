@@ -1,18 +1,21 @@
 package main
 
 import (
+	"os"
+
+	"github.com/bedLad/go-jwt-auth/routes"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	port := "8000" //os.Getenv("PORT")
+	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8000"
 	}
 	router := gin.Default()
 	router.Use(gin.Logger())
-	//routes.AuthRoutes(router)
-	//routes.UserRoutes(router)
+	routes.AuthRoutes(router)
+	routes.UserRoutes(router)
 
 	router.GET("/api-1", func(c *gin.Context) {
 		c.JSON(200, gin.H{"success": "Access granted for api-1"})

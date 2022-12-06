@@ -44,9 +44,6 @@ func VerifyPassword(userPass string, providedPass string) (bool, string) {
 
 func Signup() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
 		var user models.User
 
 		if err := c.BindJSON(&user); err != nil {
@@ -58,9 +55,9 @@ func Signup() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 		}
 
-		count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
+		count, err := userCollection.CountDocuments(context.TODO(), bson.M{"email": user.Email})
 		if err != nil {
-			log.Panic(err)
+			log.Println(err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking"})
 		}
 		if count > 0 {
@@ -70,7 +67,7 @@ func Signup() gin.HandlerFunc {
 		password := HashPassword(*user.Password)
 		user.Password = &password
 
-		count, err = userCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
+		count, err = userCollection.CountDocuments(context.TODO(), bson.M{"phone": user.Phone})
 		if err != nil {
 			log.Panic(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking"})
@@ -87,7 +84,7 @@ func Signup() gin.HandlerFunc {
 		user.Token = &token
 		user.Refresh_token = &refreshToken
 
-		result, err := userCollection.InsertOne(ctx, user)
+		result, err := userCollection.InsertOne(context.TODO(), user)
 		if err != nil {
 			msg := fmt.Sprintf("User item was not created")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
@@ -100,7 +97,7 @@ func Signup() gin.HandlerFunc {
 
 func Login() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		var ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
 		var user models.User
@@ -149,7 +146,7 @@ func GetUsers() gin.HandlerFunc {
 			return
 		}
 
-		var ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		//var ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
 
 		recordPerPage, err := strconv.Atoi(c.Query("recordPerPage"))
 		if err != nil || recordPerPage < 1 {
@@ -160,40 +157,59 @@ func GetUsers() gin.HandlerFunc {
 			page = 1
 		}
 
-		startIndex := (page - 1) * recordPerPage
-		startIndex, err = strconv.Atoi(c.Query("startIndex"))
+		//startIndex := (page - 1) * recordPerPage
+		//startIndex, err = strconv.Atoi(c.Query("startIndex"))
 
-		matchStage := bson.D{{"$match", bson.D{{}}}}
-		groupStage := bson.D{{"$group", bson.D{
-			{"_id", bson.D{{"_id", "null"}}},
-			{"total_count", bson.D{{"$sum", 1}}},
-			{"data", bson.D{{"$push", "$$ROOT"}}},
+		matchStage := bson.D{{Key: "$match", Value: bson.D{{}}}}
+		groupStage := bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{{Key: "_id", Value: "null"}}},
+			{Key: "total_count", Value: bson.D{{Key: "$sum", Value: 1}}},
+			{Key: "data", Value: bson.D{{Key: "$push", Value: "$$ROOT"}}},
 		}}}
 
 		projectStage := bson.D{
-			{"$project", bson.D{
-				{"_id", 0},
-				{"total_count", 1},
-				{"user_items", bson.D{{"$slice", []interface{}{"data", startIndex, recordPerPage}}}},
+			{Key: "$project", Value: bson.D{
+				{Key: "_id", Value: 0},
+				{Key: "password", Value: 0},
+				//{Key: "user_items", Value: bson.D{{Key: "$slice", Value: []interface{}{"data", startIndex, recordPerPage}}}},
 			}},
 		}
 
-		result, err := userCollection.Aggregate(ctx, mongo.Pipeline{
-			matchStage, groupStage, projectStage,
-		})
-		defer cancel()
-
+		cursor, err := userCollection.Aggregate(context.TODO(), mongo.Pipeline{matchStage, groupStage, projectStage})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing user items"})
 		}
-
-		var allUsers []bson.M
-
-		if err = result.All(ctx, &allUsers); err != nil {
-			log.Fatal(err.Error())
+		var allUsers []primitive.M
+		/*
+			opts := options.Find().SetProjection(bson.D{{Key: "password", Value: 0}, {Key: "_id", Value: 0}})   // This will exclude the specified fields
+			cursor, err := userCollection.Find(context.TODO(), bson.D{{}}, opts)
+			if err != nil {
+				log.Fatal(err.Error())
+				return
+			}
+		*/
+		if err = cursor.All(context.TODO(), &allUsers); err != nil {
+			log.Fatal(err)
 		}
 
-		c.JSON(http.StatusOK, allUsers[0])
+		for cursor.Next(context.TODO()) {
+			var result bson.M
+			if err = cursor.Decode(&allUsers); err != nil {
+				log.Fatal(err)
+			}
+
+			allUsers = append(allUsers, result)
+		}
+
+		fmt.Println("Records successfully fetched")
+		defer cursor.Close(context.TODO())
+
+		/*
+			if err = result.All(ctx, &allUsers); err != nil {
+				log.Fatal(err.Error())
+			}
+		*/
+		c.JSON(http.StatusOK, allUsers)
 	}
 }
 
@@ -203,7 +219,7 @@ func GetUser() gin.HandlerFunc {
 		if err := helpers.MatchUserTypeToUid(c, userId); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		var user models.User
 		filter := bson.M{"user_id": userId}

@@ -58,11 +58,11 @@ func GenerateAllTokens(email string, firstname string, lastname string, usertype
 func UpdateAllTokens(signedToken string, signedRefreshToken string, userId string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	var updateObj primitive.D
-	updateObj = append(updateObj, bson.E{"token", signedToken})
-	updateObj = append(updateObj, bson.E{"refresh_token", signedRefreshToken})
+	updateObj = append(updateObj, bson.E{Key: "token", Value: signedToken})
+	updateObj = append(updateObj, bson.E{Key: "refresh_token", Value: signedRefreshToken})
 
 	Updated_at, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-	updateObj = append(updateObj, bson.E{"update_at", Updated_at})
+	updateObj = append(updateObj, bson.E{Key: "update_at", Value: Updated_at})
 
 	upsert := true
 	filter := bson.M{"user_id": userId}
